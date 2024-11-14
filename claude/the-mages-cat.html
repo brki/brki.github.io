@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Mage's Cat - A Magical Text Adventure</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #f39c12;
+            --danger-color: #e74c3c;
+            --success-color: #2ecc71;
+            --text-color: #ecf0f1;
+            --background-color: #2c3e50;
+        }
+
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        #game-container {
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        #game-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #game-content {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+
+        #status-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        .health-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .health-bar-label {
+            width: 150px;
+            text-align: right;
+        }
+
+        .health-bar-progress {
+            flex-grow: 1;
+            height: 20px;
+            background-color: #444;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .health-bar-fill {
+            height: 100%;
+            background-color: var(--success-color);
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+
+        .health-bar-text {
+            width: 100px;
+            text-align: left;
+        }
+
+        #game-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        #command-input {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 16px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--primary-color);
+            color: var(--text-color);
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #357abd;
+        }
+
+        .ascii-art {
+            color: var(--secondary-color);
+            margin: 10px 0;
+        }
+
+        .success {
+            color: var(--success-color);
+        }
+
+        .warning {
+            color: var(--secondary-color);
+        }
+
+        .danger {
+            color: var(--danger-color);
+        }
+
+        .info {
+            color: var(--primary-color);
+        }
+
+        #inventory-display {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+
+        @media (max-width: 600px) {
+            #inventory-display {
+                position: static;
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-header">
+            <h1>The Mage's Cat</h1>
+
+        </div>
+        
+        <div id="status-bars">
+            <div class="health-bar">
+                <span class="health-bar-label">Player:</span>
+                <div class="health-bar-progress">
+                    <div class="health-bar-fill" style="width: 100%;"></div>
+                </div>
+                <span class="health-bar-text">100/100 HP</span>
+            </div>
+            <div class="health-bar" id="monster-health" style="display: none;">
+                <span class="health-bar-label">Monster:</span>
+                <div class="health-bar-progress">
+                    <div class="health-bar-fill" style="width: 100%;"></div>
+                </div>
+                <span class="health-bar-text">100/100 HP</span>
+            </div>
+        </div>
+
+        <div id="game-content"></div>
+
+        <div id="game-input">
+            <input type="text" id="command-input" placeholder="Enter your command..." autocomplete="off">
+            <button onclick="handleCommand()">Submit</button>
+        </div>
+
+        <div id="inventory-display">
+            <h3>Inventory</h3>
+            <div id="inventory-content">
+                Healing Potions: 2
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WORLD_CONFIG = {
+            locations: {
+                mage_tower: {
+                    description: "Your cozy tower filled with spell books and magical artifacts",
+                    connections: ["garden", "village_square"],
+                    monster: null
+                },
+                garden: {
+                    description: "A beautiful garden with magical herbs and flowers",
+                    connections: ["mage_tower", "forest_edge"],
+                    monster: {
+                        type: "garden_gnome",
+                        name: "Mischievous Gnome",
+                        weakness: "freeze_spell",
+                        description: "A small gnome causing chaos in your garden",
+                        health: 20,
+                        damage: 5,
+                        attack_message: "throws a tiny shovel at you"
+                    }
+                },
+                village_square: {
+                    description: "The bustling center of the village",
+                    connections: ["mage_tower", "marketplace", "old_well"],
+                    monster: null
+                },
+                marketplace: {
+                    description: "A lively marketplace with various magical items for sale",
+                    connections: ["village_square", "dark_alley"],
+                    monster: {
+                        type: "goblin",
+                        name: "Greedy Goblin",
+                        weakness: "light_spell",
+                        description: "A sneaky goblin trying to steal magical items",
+                        health: 25,
+                        damage: 8,
+                        attack_message: "swings a stolen frying pan"
+                    }
+                },
+                old_well: {
+                    description: "An ancient well rumored to have magical properties",
+                    connections: ["village_square", "underground_cave"],
+                    monster: {
+                        type: "water_spirit",
+                        name: "Angry Water Spirit",
+                        weakness: "lightning_spell",
+                        description: "A water spirit disturbed from its slumber",
+                        health: 30,
+                        damage: 10,
+                        attack_message: "splashes you with magical water"
+                    }
+                },
+                forest_edge: {
+                    description: "The boundary between civilization and wild magic",
+                    connections: ["garden", "deep_forest", "witch_hut"],
+                    monster: {
+                        type: "shadow_wolf",
+                        name: "Shadow Wolf",
+                        weakness: "light_spell",
+                        description: "A wolf made of living shadows",
+                        health: 35,
+                        damage: 12,
+                        attack_message: "bites with shadowy fangs"
+                    }
+                },
+                deep_forest: {
+                    description: "A dense forest where magical creatures roam",
+                    connections: ["forest_edge", "crystal_cave"],
+                    monster: {
+                        type: "dark_fairy",
+                        name: "Mischievous Dark Fairy",
+                        weakness: "wind_spell",
+                        description: "A fairy corrupted by dark magic",
+                        health: 15,
+                        damage: 6,
+                        attack_message: "sprinkles dark fairy dust"
+                    }
+                },
+                witch_hut: {
+                    description: "A mysterious hut belonging to a friendly witch",
+                    connections: ["forest_edge"],
+                    monster: null
+                },
+                crystal_cave: {
+                    description: "A cave filled with glowing magical crystals",
+                    connections: ["deep_forest", "underground_cave"],
+                    monster: {
+                        type: "crystal_golem",
+                        name: "Crystal Golem",
+                        weakness: "earth_spell",
+                        description: "A massive creature made of living crystal",
+                        health: 40,
+                        damage: 15,
+                        attack_message: "throws crystal shards"
+                    }
+                },
+                underground_cave: {
+                    description: "A vast network of mysterious caves",
+                    connections: ["old_well", "crystal_cave"],
+                    monster: {
+                        type: "cave_troll",
+                        name: "Sleepy Cave Troll",
+                        weakness: "sleep_spell",
+                        description: "A grumpy troll guarding its territory",
+                        health: 45,
+                        damage: 20,
+                        attack_message: "swings a huge club"
+                    }
+                },
+                dark_alley: {
+                    description: "A shadowy alley behind the marketplace",
+                    connections: ["marketplace"],
+                    monster: {
+                        type: "shadow_dragon",
+                        name: "Shadow Dragon",
+                        weakness: ["light_spell", "lightning_spell", "earth_spell"],
+                        description: "A massive dragon made of pure darkness, its eyes glowing with ancient magic. Felix is hiding behind it!",
+                        health: 100,
+                        maxHealth: 100,
+                        damage: 25,
+                        attack_message: "breathes dark flames",
+                        is_boss: true,
+                        phase: 1,
+                        phase_messages: {
+                            1: "The shadows writhe and dance, as if fleeing from something...",
+                            2: "The air crackles ominously, nature itself seems disturbed...",
+                            3: "The dragon's form grows rigid, its movements becoming more predictable..."
+                        },
+                        defeat_messages: {
+                            1: "The light pierces through the dragon's shadows, revealing its true form!",
+                            2: "Lightning courses through the dragon, making it roar in pain!",
+                            3: "The earth spell shatters the dragon's crystallized form into harmless shadows!"
+                        }
+                    }
+                }
+            },
+            spells: {
+                freeze_spell: {
+                    name: "Freeze",
+                    description: "Creates a burst of freezing magic",
+                    color: "cyan",
+                    damage: 15
+                },
+                light_spell: {
+                    name: "Divine Light",
+                    description: "Summons a bright, purifying light",
+                    color: "yellow",
+                    damage: 20
+                },
+                lightning_spell: {
+                    name: "Lightning Strike",
+                    description: "Calls down a bolt of lightning",
+                    color: "blue",
+                    damage: 25
+                },
+                wind_spell: {
+                    name: "Whirlwind",
+                    description: "Creates a powerful gust of wind",
+                    color: "white",
+                    damage: 15
+                },
+                earth_spell: {
+                    name: "Stone Shatter",
+                    description: "Breaks apart solid rock and crystal",
+                    color: "magenta",
+                    damage: 30
+                },
+                sleep_spell: {
+                    name: "Peaceful Slumber",
+                    description: "Puts creatures into a deep sleep",
+                    color: "green",
+                    damage: 35
+                }
+            }
+        };
+
+        const ASCII_ART = {
+            felix_cat: `
+    /\\___/\\
+   (  ◕ω◕  )
+   (  ᴥ  )
+    --∽--
+   (     )
+    |___|
+  =(^.^)=
+   (")_(")`,
+            mage: `
+      /\\
+     /  \\
+    /    \\
+   (  ^_^  )
+    |[==]|
+   /|    |\\
+  / |____| \\
+    |    |
+    |____|`,
+            reunion: `
+      /\\         /\\___/\\
+     /  \\       (  ◕ω◕  )
+    /    \\      (  ᴥ  )
+   (  ^_^  )     --∽--
+    |[==]|      (     )
+   /|    |\\      |___|
+  / |____| \\   =(^.^)=
+    |    |     (")_(")
+    |____|
+   
+    ❤️  ❤️  ❤️  ❤️  ❤️
+    Together at last!
+    ❤️  ❤️  ❤️  ❤️  ❤️`,
+            garden_gnome: `
+     ,_,
+    (o,o)
+    (|_|)
+    -"-"-`,
+            goblin: `
+   ,____,
+   (ಠ‿ಠ)
+    )  (
+   /    \\`,
+            water_spirit: `
+    ≈≈≈≈
+   ≈(◕ ◕)≈
+   ≈≈||≈≈
+    ≈≈≈≈`,
+            shadow_wolf: `
+    /^....^\\
+   / | .. | \\
+  /  |    |  \\
+      ||||`,
+            dark_fairy: `
+    _i_
+   (o o)
+  -\\(*)/- 
+    | |`,
+            crystal_golem: `
+    ▲▲▲
+   ▲▣ ▣▲
+    )═(
+   ▼▼▼▼`,
+            cave_troll: `
+    ,___,
+   [○_○]
+    |=|
+   /   \\`,
+            shadow_dragon: `
+    /\\   /\\
+ /\\(('v' ))
+((  /\\_/\\  ))
+ (( \\   / ))
+  (\\  ^  /)
+   \\=|=|=/
+    -----`,
+            spell_effect: `
+    *∙∙∙*
+   * ∙∙∙ *
+    *∙∙∙*`
+        };
+
+        let gameState = {
+            playerName: "",
+            currentLocation: "mage_tower",
+            previousLocation: null,
+            visitedLocations: ["mage_tower"],
+            maxHealth: 100,
+            health: 100,
+            inventory: {
+                healing_potions: 2
+            },
+            felixLocation: "dark_alley",
+            isRunning: true,
+            defeat_messages: {
+                garden_gnome: "The gnome froze solid, turned into an actual garden ornament!",
+                goblin: "The goblin hissed at the bright light and vanished into the shadows, dropping stolen trinkets everywhere!",
+                water_spirit: "The water spirit crackled with electricity and evaporated into a rainbow-colored mist!",
+                shadow_wolf: "The shadow wolf howled as the light pierced through it, dissolving into harmless shadows!",
+                dark_fairy: "The fairy got caught in the whirlwind, spun around like a pinwheel, and flew away dizzy!",
+                crystal_golem: "The crystal golem shattered into thousands of tiny sparkly pieces, like a disco ball explosion!",
+                cave_troll: "The troll yawned, curled up into a ball, and started snoring loudly with little Z's floating above!",
+                shadow_creature: "The shadow creature tried to run but tripped over its own darkness and popped like a balloon!"
+            }
+        };
+
+        function updateHealthBars() {
+            const playerHealth = document.querySelector('.health-bar:first-child .health-bar-fill');
+            const playerHealthText = document.querySelector('.health-bar:first-child .health-bar-text');
+            const monsterHealthBar = document.getElementById('monster-health');
+            
+            const healthPercentage = (gameState.health / gameState.maxHealth) * 100;
+            playerHealth.style.width = `${healthPercentage}%`;
+            if (healthPercentage <= 30) {
+                playerHealth.style.backgroundColor = '#e74c3c';
+            } else if (healthPercentage <= 70) {
+                playerHealth.style.backgroundColor = '#f39c12';
+            } else {
+                playerHealth.style.backgroundColor = '#2ecc71';
+            }
+            playerHealthText.textContent = `${gameState.health}/${gameState.maxHealth} HP`;
+
+            const currentLocation = WORLD_CONFIG.locations[gameState.currentLocation];
+            if (currentLocation.monster) {
+                monsterHealthBar.style.display = 'flex';
+                const monsterHealth = monsterHealthBar.querySelector('.health-bar-fill');
+                const monsterHealthText = monsterHealthBar.querySelector('.health-bar-text');
+                const monster = currentLocation.monster;
+                const monsterMaxHealth = monster.maxHealth || monster.health;
+                const monsterCurrentHealth = monster.health;
+                const monsterHealthPercentage = (monsterCurrentHealth / monsterMaxHealth) * 100;
+                
+                monsterHealth.style.width = `${monsterHealthPercentage}%`;
+                if (monsterHealthPercentage <= 30) {
+                    monsterHealth.style.backgroundColor = '#e74c3c';
+                } else if (monsterHealthPercentage <= 70) {
+                    monsterHealth.style.backgroundColor = '#f39c12';
+                } else {
+                    monsterHealth.style.backgroundColor = '#2ecc71';
+                }
+                monsterHealthText.textContent = `${monsterCurrentHealth}/${monsterMaxHealth} HP`;
+            } else {
+                monsterHealthBar.style.display = 'none';
+            }
+        }
+
+        function updateInventory() {
+            const inventoryContent = document.getElementById('inventory-content');
+            inventoryContent.innerHTML = `Healing Potions: ${gameState.inventory.healing_potions}`;
+        }
+
+        function printToGame(text, className = '') {
+            const gameContent = document.getElementById('game-content');
+            const message = document.createElement('div');
+            message.className = className;
+            message.textContent = text;
+            gameContent.appendChild(message);
+            gameContent.scrollTop = gameContent.scrollHeight;
+        }
+
+        function clearGameContent() {
+            const gameContent = document.getElementById('game-content');
+            gameContent.innerHTML = '';
+        }
+
+        function showLocation() {
+            const location = WORLD_CONFIG.locations[gameState.currentLocation];
+            clearGameContent();
+            
+            printToGame(`You are in: ${gameState.currentLocation}`, 'info');
+            printToGame(location.description);
+            
+            printToGame('\nAvailable paths:', 'info');
+            location.connections.forEach((connection, index) => {
+                const visited = gameState.visitedLocations.includes(connection) ? ' (visited)' : '';
+                printToGame(`${index + 1}. ${connection}${visited}`);
+            });
+
+            if (location.monster) {
+                printToGame('\nBeware!', 'danger');
+                printToGame(`A ${location.monster.name} appears!`, 'danger');
+                printToGame(ASCII_ART[location.monster.type], 'ascii-art');
+                printToGame(location.monster.description);
+                
+                if (location.monster.is_boss) {
+                    printToGame(location.monster.phase_messages[location.monster.phase], 'warning');
+                }
+                
+                printToGame('(Type "spells" to see your available spells)', 'info');
+                
+                if (gameState.currentLocation === gameState.felixLocation && 
+                    gameState.visitedLocations.length > 3) {
+                    printToGame('\nFelix is trapped behind the dragon! You must defeat it to save him!', 
+                               'warning');
+                }
+            } else if (gameState.currentLocation === gameState.felixLocation && 
+                       gameState.visitedLocations.length > 3) {
+                showReunionScene();
+            }
+
+            updateHealthBars();
+            updateInventory();
+        }
+
+        function handleCommand() {
+            const input = document.getElementById('command-input');
+            const command = input.value.toLowerCase().trim();
+            input.value = '';
+
+            if (!command) return;
+
+            const args = command.split(' ');
+            const action = args[0];
+
+            switch (action) {
+                case 'look':
+                    showLocation();
+                    break;
+
+                case 'go':
+                    if (args[1]) {
+                        handleMovement(args.slice(1).join(' '));
+                    } else {
+                        showAvailablePaths();
+                    }
+                    break;
+
+                case 'cast':
+                    if (args[1]) {
+                        castSpell(args[1]);
+                    } else {
+                        printToGame('Cast what spell?', 'danger');
+                    }
+                    break;
+
+                case 'spells':
+                    showSpells();
+                    break;
+
+                case 'inventory':
+                    showInventory();
+                    break;
+
+                case 'potion':
+                    usePotion();
+                    break;
+
+                case 'help':
+                    showHelp();
+                    break;
+
+                case 'cheat':
+                    if (args[1] === 'boss') {
+                        const pathToBoss = ['mage_tower', 'village_square', 'marketplace', 'dark_alley'];
+                        pathToBoss.forEach(loc => {
+                            if (!gameState.visitedLocations.includes(loc)) {
+                                gameState.visitedLocations.push(loc);
+                            }
+                        });
+                        gameState.currentLocation = 'dark_alley';
+                        showLocation();
+                    } else if (args[1] === 'whereis') {
+                        printToGame(`🎮 CHEAT: Felix is in the ${gameState.felixLocation}!`, 'warning');
+                    }
+                    break;
+
+                default:
+                    if (!isNaN(action) && action > 0) {
+                        handleMovement(action);
+                    } else {
+                        printToGame("I don't understand that command. Type 'help' for commands.", 'danger');
+                    }
+            }
+        }
+
+        function handleMovement(destination) {
+            const connections = WORLD_CONFIG.locations[gameState.currentLocation].connections;
+            
+            if (destination === 'back' && gameState.previousLocation) {
+                const temp = gameState.currentLocation;
+                gameState.currentLocation = gameState.previousLocation;
+                gameState.previousLocation = temp;
+                showLocation();
+                return;
+            }
+
+            if (!isNaN(destination)) {
+                const index = parseInt(destination) - 1;
+                if (index >= 0 && index < connections.length) {
+                    destination = connections[index];
+                } else {
+                    printToGame("Invalid path number!", 'danger');
+                    return;
+                }
+            }
+
+            if (connections.includes(destination)) {
+                gameState.previousLocation = gameState.currentLocation;
+                gameState.currentLocation = destination;
+                if (!gameState.visitedLocations.includes(destination)) {
+                    gameState.visitedLocations.push(destination);
+                }
+                showLocation();
+            } else {
+                printToGame("You can't go there from here!", 'danger');
+            }
+        }
+
+        function showAvailablePaths() {
+            printToGame('\nWhere would you like to go?', 'info');
+            const connections = WORLD_CONFIG.locations[gameState.currentLocation].connections;
+            connections.forEach((connection, index) => {
+                const visited = gameState.visitedLocations.includes(connection) ? ' (visited)' : '';
+                printToGame(`${index + 1}. ${connection}${visited}`);
+            });
+            
+            if (gameState.previousLocation) {
+                printToGame('\nOr type "back" to return to the previous location.', 'info');
+            }
+        }
+
+        function castSpell(spellName) {
+            const location = WORLD_CONFIG.locations[gameState.currentLocation];
+            if (!location.monster) {
+                printToGame("There's no monster here to cast spells at!", 'danger');
+                return;
+            }
+
+            if (!spellName.endsWith('_spell')) {
+                spellName = `${spellName}_spell`;
+            }
+
+            const spell = WORLD_CONFIG.spells[spellName];
+            if (!spell) {
+                printToGame("You don't know that spell! Type 'spells' to see available spells.", 'danger');
+                return;
+            }
+
+            printToGame(`\nCasting ${spell.name}!`, 'info');
+            printToGame(ASCII_ART.spell_effect, 'ascii-art');
+
+            const monster = location.monster;
+            if (monster.is_boss) {
+                handleBossSpell(spellName, monster);
+            } else {
+                handleRegularSpell(spellName, monster, location);
+            }
+        }
+
+        function handleRegularSpell(spellName, monster, location) {
+            if (spellName === monster.weakness) {
+                printToGame(gameState.defeat_messages[monster.type], 'success');
+                location.monster = null;
+                setTimeout(() => {
+                    showLocation();
+                }, 3000);
+            } else {
+                printToGame(`The spell had no effect on ${monster.name}!`, 'danger');
+                monsterAttack(monster);
+            }
+            updateHealthBars();
+        }
+
+        function handleBossSpell(spellName, monster) {
+            const currentPhase = monster.phase;
+            const currentWeakness = monster.weakness[currentPhase - 1];
+
+            if (spellName === currentWeakness) {
+                printToGame(monster.defeat_messages[currentPhase], 'success');
+                
+                if (currentPhase < monster.weakness.length) {
+                    setTimeout(() => {
+                        monster.phase++;
+                        monster.health = Math.max(0, monster.health - 35);
+                        printToGame(monster.phase_messages[monster.phase], 'warning');
+                        monsterAttack(monster);
+                    }, 3000);
+                } else {
+                    setTimeout(() => {
+                        WORLD_CONFIG.locations[gameState.currentLocation].monster = null;
+                        showLocation();
+                    }, 3000);
+                }
+            } else {
+                printToGame("The spell seems ineffective in the dragon's current state!", 'danger');
+                monsterAttack(monster);
+            }
+            updateHealthBars();
+        }
+
+        function showReunionScene() {
+            printToGame('\nFelix Found!', 'success');
+            printToGame(ASCII_ART.reunion, 'ascii-art');
+            printToGame('Felix runs to you with joy!', 'success');
+            printToGame('You both head home together, inseparable once again.', 'success');
+        }
+
+        function monsterAttack(monster) {
+            printToGame(`\nThe ${monster.name} ${monster.attack_message}!`, 'danger');
+            gameState.health = Math.max(0, gameState.health - monster.damage);
+            
+            if (gameState.health <= 0) {
+                printToGame('\nYour health has reached 0!', 'danger');
+                printToGame('You collapse from your injuries...', 'danger');
+                printToGame('Game Over!', 'danger');
+                gameState.isRunning = false;
+            }
+            
+            updateHealthBars();
+        }
+
+        function usePotion() {
+            if (gameState.inventory.healing_potions > 0) {
+                gameState.inventory.healing_potions--;
+                gameState.health = Math.min(gameState.maxHealth, gameState.health + 50);
+                printToGame('You drink a healing potion!', 'success');
+                updateHealthBars();
+                updateInventory();
+            } else {
+                printToGame("You don't have any healing potions!", 'danger');
+            }
+        }
+
+        function showSpells() {
+            printToGame('\nKnown Spells:', 'info');
+            Object.entries(WORLD_CONFIG.spells).forEach(([spellId, spell]) => {
+                const baseName = spellId.replace('_spell', '');
+                printToGame(`- ${spell.name} (cast ${baseName}): ${spell.description} [Damage: ${spell.damage}]`);
+            });
+        }
+
+        function showHelp() {
+            printToGame('\nAvailable commands:', 'info');
+            printToGame('- look: Look around', 'info');
+            printToGame('- go: Show available paths and choose destination', 'info');
+            printToGame('- go <location or number>: Move to a location (e.g., "go 1" or "go garden")', 'info');
+            printToGame('- <number>: Directly enter a number to move', 'info');
+            printToGame('- go back: Return to the previous location', 'info');
+            printToGame('- cast <spell>: Cast a spell (e.g., "cast freeze")', 'info');
+            printToGame('- spells: Show known spells', 'info');
+            printToGame('- inventory: Show your inventory', 'info');
+            printToGame('- potion: Use a healing potion', 'info');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const playerName = prompt('Welcome, brave mage! What is your name?');
+            gameState.playerName = playerName || 'Mage';
+            printToGame(`Welcome to the Magical Cat Quest, ${gameState.playerName}!`, 'success');
+            printToGame(ASCII_ART.mage, 'ascii-art');
+            printToGame('Your cat Felix has gone missing! Search the world to find him.', 'info');
+            printToGame('Type "help" for available commands.', 'info');
+            setTimeout(() => {
+                    showLocation();
+                }, 6000);
+
+            document.getElementById('command-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleCommand();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
