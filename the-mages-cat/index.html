@@ -799,7 +799,7 @@
             printToGame('\nKnown Spells:', 'info');
             Object.entries(WORLD_CONFIG.spells).forEach(([spellId, spell]) => {
                 const baseName = spellId.replace('_spell', '');
-                printToGame(`- ${spell.name} (cast ${baseName}): ${spell.description} [Damage: ${spell.damage}]`);
+                printToGame(`- ${spell.name} (cast ${baseName}): ${spell.description}`);
             });
         }
 
